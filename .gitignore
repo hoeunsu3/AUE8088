@@ -96,7 +96,9 @@ wheels/
 /wandb/
 .installed.cfg
 *.egg
-
+datasets/*
+kaist-rgbt/*
+kaist-rgbt-aue8088.tar
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
