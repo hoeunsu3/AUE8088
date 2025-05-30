@@ -244,7 +244,8 @@ def train(hyp, opt, device, callbacks):
     maps = np.zeros(nc)  # mAP per class
     results = (0, 0, 0, 0, 0, 0, 0)  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)
     scheduler.last_epoch = start_epoch - 1  # do not move
-    scaler = torch.amp.GradScaler(enabled=amp)
+    # scaler = torch.amp.GradScaler(enabled=amp) # Fix
+    scaler = torch.cuda.amp.GradScaler(enabled=amp)
     stopper, stop = EarlyStopping(patience=opt.patience), False
     compute_loss = ComputeLoss(model)  # init loss class
     callbacks.run("on_train_start")
@@ -269,10 +270,18 @@ def train(hyp, opt, device, callbacks):
             callbacks.run("on_train_batch_start")
             ni = i + nb * epoch  # number integrated batches (since train start)
 
-            if isinstance(imgs, list):
+            # if isinstance(imgs, list):
+            #     imgs = [img.to(device, non_blocking=True).float() / 255 for img in imgs]    # For RGB-T input
+            # else:
+            #     imgs = imgs.to(device, non_blocking=True).float() / 255  # uint8 to float32, 0-255 to 0.0-1.0
+
+            if isinstance(imgs, (list, tuple)):
+                if isinstance(imgs, tuple):
+                    imgs = list(imgs)
                 imgs = [img.to(device, non_blocking=True).float() / 255 for img in imgs]    # For RGB-T input
             else:
                 imgs = imgs.to(device, non_blocking=True).float() / 255  # uint8 to float32, 0-255 to 0.0-1.0
+
 
             # Warmup
             if ni <= nw:
