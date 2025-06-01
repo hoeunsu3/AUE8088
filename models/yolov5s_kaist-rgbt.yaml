@@ -5,14 +5,14 @@
 nc: 4 # number of classes
 depth_multiple: 0.33 # model depth multiple
 width_multiple: 0.50 # layer channel multiple
-#anchors:
-#  - [10, 13, 16, 30, 33, 23] # P3/8
-#  - [30, 61, 62, 45, 59, 119] # P4/16
-#  - [116, 90, 156, 198, 373, 326] # P5/32
 anchors:
-  - [8, 24, 12, 36, 16, 48]         # P3/8  → 작은 pedestrian
-  - [24, 72, 32, 96, 40, 120]       # P4/16 → 중간 크기 pedestrian
-  - [48, 144, 64, 192, 80, 240]     # P5/32 → 큰 pedestrian
+ - [10, 13, 16, 30, 33, 23] # P3/8
+ - [30, 61, 62, 45, 59, 119] # P4/16
+ - [116, 90, 156, 198, 373, 326] # P5/32
+# anchors:
+#   - [8, 24, 12, 36, 16, 48]         # P3/8  → 작은 pedestrian
+#   - [24, 72, 32, 96, 40, 120]       # P4/16 → 중간 크기 pedestrian
+#   - [48, 144, 64, 192, 80, 240]     # P5/32 → 큰 pedestrian
 
 # YOLOv5 v6.0 backbone
 backbone:
