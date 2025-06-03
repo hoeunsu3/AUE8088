@@ -35,7 +35,6 @@ from utils.augmentations import (
     letterbox,
     mixup,
     random_perspective,
-    random_perspective_rgb_ir,
 )
 from utils.general import (
     DATASETS_DIR,
@@ -1212,75 +1211,71 @@ class LoadRGBTImagesAndLabels(LoadImagesAndLabels):
                 img, labels = mixup(img, labels, *self.load_mosaic(random.choice(self.indices)))
 
         else:
-            # Load images
+            # Load image
+            # hw0s: original shapes, hw1s: resized shapes
             imgs, hw0s, hw1s = self.load_image(index)
 
-            # Unpack IR/RGB
-            img_ir, img_rgb = imgs
-            (h0_ir, w0_ir), (h0_rgb, w0_rgb) = hw0s
-            (h_ir, w_ir), (h_rgb, w_rgb) = hw1s
+            for ii, (img, (h0, w0), (h, w)) in enumerate(zip(imgs, hw0s, hw1s)):
+                # Letterbox
+                shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
+                img, ratio, pad = letterbox(img, shape, auto=False, scaleup=self.augment)
+                shapes = (h0, w0), (ratio, pad)  # for COCO mAP rescaling
 
-            # Letterbox: 같은 크기로 맞춤
-            shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size
-            img_rgb, ratio, pad = letterbox(img_rgb, shape, auto=False, scaleup=self.augment)
-            img_ir, _, _ = letterbox(img_ir, shape, auto=False, scaleup=self.augment)
+                labels = self.labels[index].copy()
+                if labels.size:  # normalized xywh to pixel xyxy format
+                    labels[:, 1:3] += labels[:, 3:5] / 2.0      # (x_lefttop, y_lefttop) -> (x_center, y_center)
+                    labels[:, 1:] = xywhn2xyxy(labels[:, 1:], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
 
-            shapes = (h0_rgb, w0_rgb), (ratio, pad)
+                if self.augment:
+                    raise NotImplementedError('Please make data augmentation work!')
 
-            # 라벨 불러오기 및 변환
-            labels = self.labels[index].copy()
-            if labels.size:
-                labels[:, 1:3] += labels[:, 3:5] / 2.0
-                labels[:, 1:] = xywhn2xyxy(labels[:, 1:], ratio[0] * w_rgb, ratio[1] * h_rgb, padw=pad[0], padh=pad[1])
+                    img, labels = random_perspective(
+                        img,
+                        labels,
+                        degrees=hyp["degrees"],
+                        translate=hyp["translate"],
+                        scale=hyp["scale"],
+                        shear=hyp["shear"],
+                        perspective=hyp["perspective"],
+                    )
 
-            if self.augment:
-                # 랜덤 투영 변환
-                img_rgb, img_ir, labels, _ = random_perspective_rgb_ir(
-                    img_rgb, img_ir, labels, labels,
-                    degrees=hyp["degrees"],
-                    translate=hyp["translate"],
-                    scale=hyp["scale"],
-                    shear=hyp["shear"],
-                    perspective=hyp["perspective"],
-                )
+                nl = len(labels)  # number of labels
+                if nl:
+                    labels[:, 1:5] = xyxy2xywhn(labels[:, 1:5], w=img.shape[1], h=img.shape[0], clip=True, eps=1e-3)
 
-                # Albumentations
-                img_rgb, labels = self.albumentations(img_rgb, labels)
-                img_ir, labels = self.albumentations(img_ir, labels)
-                nl = len(labels)
+                if self.augment:
+                    # Albumentations
+                    img, labels = self.albumentations(img, labels)
+                    nl = len(labels)  # update after albumentations
 
-                # HSV color augmentation
-                augment_hsv(img_rgb, hgain=hyp["hsv_h"], sgain=hyp["hsv_s"], vgain=hyp["hsv_v"])
-                augment_hsv(img_ir, hgain=hyp["hsv_h"], sgain=hyp["hsv_s"], vgain=hyp["hsv_v"])
+                    # HSV color-space
+                    augment_hsv(img, hgain=hyp["hsv_h"], sgain=hyp["hsv_s"], vgain=hyp["hsv_v"])
 
-                # Flip up-down
-                if random.random() < hyp["flipud"]:
-                    img_rgb = np.flipud(img_rgb)
-                    img_ir = np.flipud(img_ir)
-                    if nl:
-                        labels[:, 2] = 1 - labels[:, 2]
+                    # Flip up-down
+                    if random.random() < hyp["flipud"]:
+                        img = np.flipud(img)
+                        if nl:
+                            labels[:, 2] = 1 - labels[:, 2]
 
-                # Flip left-right
-                if random.random() < hyp["fliplr"]:
-                    img_rgb = np.fliplr(img_rgb)
-                    img_ir = np.fliplr(img_ir)
-                    if nl:
-                        labels[:, 1] = 1 - labels[:, 1]
-            else:
-                nl = len(labels)
+                    # Flip left-right
+                    if random.random() < hyp["fliplr"]:
+                        img = np.fliplr(img)
+                        if nl:
+                            labels[:, 1] = 1 - labels[:, 1]
 
-            # xyxy → xywhn
-            if nl:
-                labels[:, 1:5] = xyxy2xywhn(labels[:, 1:5], w=img_rgb.shape[1], h=img_rgb.shape[0], clip=True, eps=1e-3)
+                    # Cutouts
+                    # labels = cutout(img, labels, p=0.5)
+                    # nl = len(labels)  # update after cutout
 
-            labels_out = torch.zeros((nl, 7))
-            if nl:
-                labels_out[:, 1:] = torch.from_numpy(labels)
+                labels_out = torch.zeros((nl, 7))
+                if nl:
+                    labels_out[:, 1:] = torch.from_numpy(labels)
 
-            # 이미지 정리
-            img_rgb = torch.from_numpy(img_rgb.transpose((2, 0, 1))[::-1].copy())
-            img_ir = torch.from_numpy(img_ir.transpose((2, 0, 1))[::-1].copy())
-            imgs = [img_ir, img_rgb]
+                # Convert
+                img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
+                img = np.ascontiguousarray(img)
+
+                imgs[ii] = torch.from_numpy(img)
 
         # Drop occlusion level
         labels_out = labels_out[:, :-1]
@@ -1319,7 +1314,8 @@ class LoadRGBTImagesAndLabels(LoadImagesAndLabels):
             return imgs, (h0s, w0s), img_shapes
 
         return self.ims[i], self.im_hw0[i], self.im_hw[i]  # im, hw_original, hw_resized
-    
+
+
     @staticmethod
     def collate_fn(batch):
         """Batches images, labels, paths, shapes, and indices assigning unique indices to targets in merged label tensor."""
