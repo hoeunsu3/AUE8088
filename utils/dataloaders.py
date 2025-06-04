@@ -1233,6 +1233,7 @@ class LoadRGBTImagesAndLabels(LoadImagesAndLabels):
                 labels[:, 1:3] += labels[:, 3:5] / 2.0
                 labels[:, 1:] = xywhn2xyxy(labels[:, 1:], ratio[0] * w_rgb, ratio[1] * h_rgb, padw=pad[0], padh=pad[1])
 
+            # TODO: Augmentation
             if self.augment:
                 # 랜덤 투영 변환
                 img_rgb, img_ir, labels, _ = random_perspective_rgb_ir(
@@ -1246,7 +1247,7 @@ class LoadRGBTImagesAndLabels(LoadImagesAndLabels):
 
                 # Albumentations
                 img_rgb, labels = self.albumentations(img_rgb, labels)
-                img_ir, labels = self.albumentations(img_ir, labels)
+                img_ir, _ = self.albumentations(img_ir, labels)
                 nl = len(labels)
 
                 # HSV color augmentation
