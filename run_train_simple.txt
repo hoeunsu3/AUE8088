@@ -1,1 +1,4 @@
-python train_simple.py --img 640 --batch-size 16 --epochs 20 --data data/kaist-rgbt.yaml --cfg models/yolov5n_kaist-rgbt.yaml --weights yolov5n.pt --workers 16 --name yolov5n-rgbt-loss-anchor --rgbt
+python train_simple.py --img 640 --batch-size 16 --epochs 20 --data data/kaist-rgbt.yaml --cfg models/yolov5n_kaist-rgbt.yaml --weights yolov5n.pt --workers 16 --name yolov5n-rgbt --rgbt --hyp data/hyps/hyp.scratch-finetune.yaml
+
+
+python val.py --weights runs\train\yolov5n-rgbt\weights\best.pt --data data\kaist-rgbt.yaml --task test --save-json --rgbt

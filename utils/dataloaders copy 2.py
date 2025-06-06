@@ -1201,10 +1201,10 @@ class LoadRGBTImagesAndLabels(LoadImagesAndLabels):
         hyp = self.hyp
         mosaic = self.mosaic and random.random() < hyp["mosaic"]
         if mosaic:
-            # raise NotImplementedError('Please make "mosaic" augmentation work!')
+            raise NotImplementedError('Please make "mosaic" augmentation work!')
 
             # TODO: Load mosaic
-            img, labels = self.load_mosaic_rgb_ir(index)
+            img, labels = self.load_mosaic(index)
             shapes = None
 
             # TODO: MixUp augmentation
@@ -1321,66 +1321,6 @@ class LoadRGBTImagesAndLabels(LoadImagesAndLabels):
 
         return self.ims[i], self.im_hw0[i], self.im_hw[i]  # im, hw_original, hw_resized
     
-    def load_mosaic_rgb_ir(self, index):
-        """Load 4-image mosaic for RGB + IR image pair. Returns (imgs, labels)"""
-        labels4 = []
-        s = self.img_size
-        yc, xc = (int(random.uniform(-x, 2 * s + x)) for x in self.mosaic_border)  # mosaic center x, y
-        indices = [index] + random.choices(self.indices, k=3)
-        random.shuffle(indices)
-
-        # 두 채널 각각 mosaic 이미지 초기화
-        img4_rgb = np.full((s * 2, s * 2, 3), 114, dtype=np.uint8)
-        img4_ir = np.full((s * 2, s * 2, 3), 114, dtype=np.uint8)  # IR도 3채널 assumed
-
-        for i, index in enumerate(indices):
-            imgs, _, (h, w) = self.load_image(index)
-            img_ir, img_rgb = imgs
-
-            # 위치 설정
-            if i == 0:  # top left
-                x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc
-                x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h
-            elif i == 1:  # top right
-                x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, s * 2), yc
-                x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
-            elif i == 2:  # bottom left
-                x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(s * 2, yc + h)
-                x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
-            elif i == 3:  # bottom right
-                x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
-                x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(h, y2a - y1a)
-
-            # Mosaic에 이미지 삽입
-            img4_rgb[y1a:y2a, x1a:x2a] = img_rgb[y1b:y2b, x1b:x2b]
-            img4_ir[y1a:y2a, x1a:x2a] = img_ir[y1b:y2b, x1b:x2b]
-            padw, padh = x1a - x1b, y1a - y1b
-
-            # 라벨 처리
-            labels = self.labels[index].copy()
-            if labels.size:
-                labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)
-                labels4.append(labels)
-
-        # 라벨 클리핑 및 병합
-        labels4 = np.concatenate(labels4, 0)
-        np.clip(labels4[:, 1:], 0, 2 * s, out=labels4[:, 1:])
-
-        # Copy-paste 및 랜덤 투영 변환
-        img4_rgb, labels4, _ = copy_paste(img4_rgb, labels4, [], p=self.hyp["copy_paste"])
-        img4_ir, _, _ = copy_paste(img4_ir, labels4, [], p=self.hyp["copy_paste"])
-        img4_rgb, img4_ir, labels4, _ = random_perspective_rgb_ir(
-            img4_rgb, img4_ir, labels4, labels4,
-            degrees=self.hyp["degrees"],
-            translate=self.hyp["translate"],
-            scale=self.hyp["scale"],
-            shear=self.hyp["shear"],
-            perspective=self.hyp["perspective"],
-            border=self.mosaic_border,
-        )
-
-        return [img4_ir, img4_rgb], labels4
-
     @staticmethod
     def collate_fn(batch):
         """Batches images, labels, paths, shapes, and indices assigning unique indices to targets in merged label tensor."""
