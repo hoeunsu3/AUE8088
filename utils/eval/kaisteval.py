@@ -699,9 +699,9 @@ if __name__ == "__main__":
     #                     help='Please put the path of the annotation file. Only support json format.')
     parser.add_argument('--annFile', type=str, default='evaluation_script/KAIST_val-5fold-01_annotation.json',
                         help='Please put the path of the annotation file. Only support json format.')
-    parser.add_argument('--rstFiles', type=str, nargs='+', default=['evaluation_script/MLPD_result.json'],
+    parser.add_argument('--rstFiles', type=str, nargs='+', default=['evaluation_script/1best_predictions.json'],
                         help='Please put the path of the result file. Only support json, txt format.')
-    parser.add_argument('--evalFig', type=str, default=None,
+    parser.add_argument('--evalFig', type=str, default='results.jpg',
                         help='Please put the output path of the Miss rate versus false positive per-image (FPPI) curve')
     args = parser.parse_args()
 
