@@ -149,8 +149,6 @@ def run(
     callbacks=Callbacks(),
     compute_loss=None,
     epoch=None,
-    rgbt=False,  # <<< 이 부분을 추가합니다.
-
 ):
     # Initialize/load model and set device
     training = model is not None
@@ -197,44 +195,19 @@ def run(
                 f"{weights} ({ncm} classes) trained on different --data than what you passed ({nc} "
                 f"classes). Pass correct combination of --weights and --data that are trained together."
             )
-        # model.warmup(imgsz=(1 if pt else batch_size, 3, imgsz, imgsz))  # warmup
-        # val.py의 run 함수 내부, model.warmup 호출 부분 수정
-        # (training=False 블록 안에 있음)
-        if opt.rgbt: # opt.rgbt가 True이고, pt 모델일 경우 (엔진 등 다른 백엔드는 별도 고려 필요)
-            # RGBT 모델을 위한 더미 입력 (리스트 형태)
-            dummy_input_list = [
-                torch.zeros(1 if pt else batch_size, 3, imgsz, imgsz, device=model.device),
-                torch.zeros(1 if pt else batch_size, 3, imgsz, imgsz, device=model.device)
-            ]
-            if half: # 또는 model.fp16
-                dummy_input_list = [d.half() for d in dummy_input_list]
-            # DetectMultiBackend의 PyTorch 모델에 직접 forward 호출하여 warmup
-            if pt: # PyTorch 모델인 경우
-                model.model(dummy_input_list) # model.model이 실제 PyTorch 모델임
-            else: # 다른 백엔드의 경우 warmup 방식 확인 필요 (일단 기존 방식 유지 또는 에러 발생 가능성)
-                model.warmup(imgsz=(1 if pt else batch_size, 3, imgsz, imgsz))
-        else:
-            model.warmup(imgsz=(1 if pt else batch_size, 3, imgsz, imgsz))
+        model.warmup(imgsz=(1 if pt else batch_size, 3, imgsz, imgsz))  # warmup
         pad, rect = (0.0, False) if task == "speed" else (0.5, pt)  # square inference for benchmarks
-        if task == "speed":
-            pad, rect = 0.0, False
-        elif rgbt: # RGBT 모드이고, task가 val 또는 test인 경우 (KAIST 평가 때문)
-            pad, rect = 0.5, False # RGBT를 위한 KAIST 평가 시 rect는 항상 False
-        else: # 일반적인 val 또는 test
-            pad, rect = 0.5, pt # PyTorch 모델이면 True, 아니면 False (기존 로직 유지)
-        task_to_load = task if task in ("train", "val", "test") else "val"  # data 키 접근 전 task 이름 확정
+        task = task if task in ("train", "val", "test") else "val"  # path to train/val/test images
         dataloader = create_dataloader(
-            data[task_to_load],
+            data[task],
             imgsz,
             batch_size,
             stride,
             single_cls,
             pad=pad,
             rect=rect,
-            workers=0,
-            prefix=colorstr(f"{task_to_load}: "),
-            rgbt_input=rgbt  # <<< 이 부분을 추가해야 합니다 (opt.rgbt는 parse_opt에서 추가된 값)
-
+            workers=workers,
+            prefix=colorstr(f"{task}: "),
         )[0]
 
     seen = 0
@@ -385,20 +358,11 @@ def run(
 
         # Run evaluation: KAIST Multispectral Pedestrian Dataset
         try:
-            # 생성된 검증용 어노테이션 JSON 파일의 정확한 경로
-            # 이 경로는 프로젝트 루트(AUE8088_2) 기준입니다.
-            kaist_annotation_file = 'evaluation_script/KAIST_test_annotation.json' # <--- ⭐ 여기를 수정!
-
-            if not os.path.exists(kaist_annotation_file):
-                # 에러 메시지에 정확한 파일 경로를 포함하도록 수정
-                raise FileNotFoundError(f"KAIST validation annotation file not found at '{kaist_annotation_file}'. "
-                                        f"Please generate it using utils/eval/generate_kaist_ann_json.py")
-            
-            # python3 대신 현재 환경의 python 사용 (또는 그냥 python)
-            # 명령어 문자열을 만들 때 f-string 사용 권장
-            eval_command = f"python utils/eval/kaisteval.py --annFile {kaist_annotation_file} --rstFile {pred_json}"
-            LOGGER.info(f"Running KAIST evaluation: {eval_command}")
-            os.system(eval_command) # subprocess.run 권장
+            # HACK: need to generate KAIST_annotation.json for your own validation set
+            # if not os.path.exists('utils/eval/KAIST_val-A_annotation.json'):
+            if not os.path.exists('evaluation_script/KAIST_test_annotation.json'):
+                raise FileNotFoundError('Please generate KAIST_annotation.json for your own validation set. (See utils/eval/generate_kaist_ann_json.py)')
+            os.system(f"python3 utils/eval/kaisteval.py --annFile evaluation_script/KAIST_test_annotation.json --rstFile {pred_json}")
         except Exception as e:
             LOGGER.info(f"kaisteval unable to run: {e}")
 
@@ -423,7 +387,7 @@ def parse_opt():
     parser.add_argument("--conf-thres", type=float, default=0.001, help="confidence threshold")
     parser.add_argument("--iou-thres", type=float, default=0.6, help="NMS IoU threshold")
     parser.add_argument("--max-det", type=int, default=300, help="maximum detections per image")
-    parser.add_argument("--task", default="test", help="train, val, test, speed or study")
+    parser.add_argument("--task", default="val", help="train, val, test, speed or study")
     parser.add_argument("--device", default="", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
     parser.add_argument("--workers", type=int, default=8, help="max dataloader workers (per RANK in DDP mode)")
     parser.add_argument("--single-cls", action="store_true", help="treat as single-class dataset")
@@ -438,8 +402,6 @@ def parse_opt():
     parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
     parser.add_argument("--half", action="store_true", help="use FP16 half-precision inference")
     parser.add_argument("--dnn", action="store_true", help="use OpenCV DNN for ONNX inference")
-    parser.add_argument("--rgbt", action="store_true", help="Feed RGB-T multispectral image pair.")
-    # parser.add_argument("--model", default="yolov5s", help="model type")
     opt = parser.parse_args()
     opt.data = check_yaml(opt.data)  # check YAML
     opt.save_json |= opt.data.endswith("coco.yaml")
