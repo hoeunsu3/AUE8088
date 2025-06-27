@@ -1,4 +1,11 @@
-python train_simple.py --img 640 --batch-size 16 --epochs 20 --data data/kaist-rgbt.yaml --cfg models/yolov5n_kaist-rgbt.yaml --weights yolov5n.pt --workers 16 --name yolov5n-rgbt --rgbt --hyp data/hyps/hyp.scratch-finetune.yaml
+python train_simple.py --img 640 --batch-size 16 --epochs 20 --data data/kaist-rgbt.yaml --cfg models/yolov5n_kaist-rgbt.yaml --weights yolov5n.pt --workers 16 --name yolov5n-rgbt --rgbt --hyp data/hyps/hyp.scratch-med.yaml
 
+python train_simple.py --img 640 --batch-size 16 --epochs 100 --data data/kaist-rgbt.yaml --cfg models/yolov5s_kaist-rgbt.yaml --weights yolov5s.pt --workers 16 --name yolov5s-rgbt --rgbt --hyp data/hyps/hyp.scratch-med.yaml
 
-python val.py --weights runs\train\yolov5n-rgbt\weights\best.pt --data data\kaist-rgbt.yaml --task test --save-json --rgbt
+python val_copy.py --weights runs\train\yolov5n-rgbt\weights\best.pt --data data\kaist-rgbt.yaml --task test --save-json --rgbt
+
+- s모델 log
+1,2 기본 augment
+3 앵커 + augment
+4 기본 + hyp_med + train_all
+5 기본 + hyp_high + train_all + 200 epoch
